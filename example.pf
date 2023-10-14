@@ -1,0 +1,6 @@
+axiom: given a, b : R, a + b : R
+axiom: given a, b : R, (a + b) = a + b
+
+a + b + c 
+
+EXPANSION: R + R + R -> (R + R) + R -> R + R -> (R + R) -> R
