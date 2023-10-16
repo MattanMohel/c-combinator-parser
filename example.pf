@@ -1,6 +1,4 @@
-axiom: given a, b : R, a + b : R
-axiom: given a, b : R, (a + b) = a + b
+axiom asscoiative: (a + b) = a + b
 
-a + b + c 
-
-EXPANSION: R + R + R -> (R + R) + R -> R + R -> (R + R) -> R
+apply asscoiative: (1 + 1)
+>> 1 + 1
