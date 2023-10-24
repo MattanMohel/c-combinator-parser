@@ -16,6 +16,10 @@
 #define VEC_NEW(T, N)  (T*)vec_new(N, sizeof(T))
 #define VEC_PUSH(V, E) vec_realloc((void**)&V, sizeof(V[0])); *(V + VEC_LEN(V)++) = E
 
+#define STACK_NEW(T, N) VEC_NEW(T, N)
+#define STACK_PEEK(V) V[VEC_LEN(V) - 1]
+#define STACK_POP(V) V[--VEC_LEN(V)]
+
 void* vec_new (int cap, int stride);
 void* vec_realloc(void** buf, int stride);
 

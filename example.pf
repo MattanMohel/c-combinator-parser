@@ -1,4 +1,121 @@
-axiom asscoiative: (a + b) = a + b
+Start with simple symbolic substitution: 
 
-apply asscoiative: (1 + 1)
->> 1 + 1
+a : axiom = (a + b) + c = a + (b + c)
+
+-- (a + b) + c = a + (b + c) will be parsed to... 
+
+-- AST:
+--     +            +
+--    / \          / \
+--   +   c    =   a   + 
+--  / \              / \
+-- a   b            b   c
+
+-- Note that, by implicit definition, all binary functors are left-associative (since we evaluate left to right)
+-- therefore the axiom "(a + b) + c = a + (b + c)" is equivalent to the AST of "a + b + c = a + (b + c)"
+
+>> a(1 + 2 + 3)
+<< 1 + (2 + 3) 
+
+-- declare function type
+C : Int, Int -> Int
+-- implement function definition
+C (n k) = n! / k! (n - k)!
+
+-- illustrates a more general possible pattern...
+x : Int
+x = 10
+
+-- declare then define later, so the function definition is equivalent to...
+C (n k) : Int, Int -> Int = n! / k! (n - k)!
+
+-- NOTE that it doesn't matter whether C is first declared with or without parameter names
+
+B : Int, Int, Int -> Expr
+B (x y n) =  Σ k=0 -> n [ C (n k) x^(n-k) y^k ]
+
+binomial_expansion : axiom = 
+  given x, y : Real, n : Int 
+  then (x + y)^n = B (x y n)
+
+-- multiple notes:
+-- 1). 'given' is the same as 'let' or 'assume.' It's technically syntactic sugar
+-- 2). the comma after 'x, y : Real' denotes a separation of grouping for the parser
+-- 3). this can technically be defined as an a theorem with induction... doesn't matter now
+
+-- AST:
+--     ^           B()
+--    / \           |
+--   +   n   =   [x y n]
+--  / \
+-- x   y
+
+-- Note that the big difference between functions and axioms is that functions always 
+-- maintain direct equality with their outputs, while axioms designate implicative truths
+
+Lets play around some...
+
+add_associative : axiom = (a + b) + c = a + (b + c)
+mul_associative : axiom = (a * b) + c = a + (b * c)
+
+mul_communitative : axiom = a * b = b * a
+
+add_inv : axiom = a - a = 0
+mul_inv : axiom = given a : Real ≠ 0 then a / a = 1
+
+mul_distribution : axiom = a (b + c) = a*b + b*c
+
+>> mul_distribution (a + b) (c + d)
+<< (a + b) c + (a + b) d
+>> mul_communitative (a + b) c + (a + b) d
+<< c (a + b) + d (a + b)
+>> mul_distribution c (a + b) + d (a + b)
+<< c*a + c*b + d*a + d*b
+
+-- So (a + b) (c + d) = c*a + c*b + d*a + d*b
+-- hence (a + b)^2 = (a + b) (a + b) = a*a + a*b + b*a + c*c = a^2 + 2(a*b) + c^2
+
+-- Important methods to define...
+-- 1). apply_repeated   -> repeatedly apply a certain pattern until it cannot match anymore
+-- i.e. apply_repeated "mul_distribute (a + b)^n" would apply the rule 'n' times
+-- 2). apply-recursive  -> apply a pattern to a sub-tree of the AST that can match the pattern
+-- i.e. with "mul_distribute c (a + b) + d (a + b)" the AST is...
+
+-- AST:
+--      +
+--     / \
+--    * - \ --> #1 recursive
+--   / \   \
+--  c   +   \
+--     / \   \
+--    a   b   * --> #2 recursive
+--           / \
+--          d   +
+--             / \
+--            a   b
+
+
+Now lets try and formalize a theorem...
+
+a : theorem = (a + b)^2 = a^2 + 2(a*b) + b^2
+p : proof (a) =
+  (a + b)^2             = 
+  (a + b) (a + b)       =
+  a (a + b) + b (a + b) = 
+  a*a + a*b + b*a + b*b = 
+  a^2 + a*b + b*a + b^2 = 
+  a^2 + a*b + a*b + b^2 = 
+  a^2 + 2(a*b) + b^2
+Qed
+
+
+Lets think a bit about syntax, lets make it look better... and simpler 
+
+Type assignment...
+
+1). Real a
+    Real a = 10
+
+    axiom a = 
+2). 
+
