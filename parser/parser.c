@@ -4,7 +4,8 @@
 #include <string.h>
 #include "parser.h"
 
-#define STACK_SIZE 12
+#define RESULT_STACK_SIZE 12
+#define MARK_STACK_SIZE   128
 
 typedef pc_value_t*(*pc_fold_t)(int, pc_result_t*);
 typedef void pc_value_t;
@@ -17,7 +18,7 @@ typedef enum {
   PC_TYPE_SOME  = 2,
   PC_TYPE_ANY   = 3,
   PC_TYPE_AND   = 4,
-  PC_TYPE_RULE  = 5,
+  PC_TYPE_APPLY = 5,
 } pc_type_t;
 
 typedef struct {
@@ -30,10 +31,53 @@ typedef struct pc_input_t {
   char *str;
   int   len;
   pc_state_t state;
+  pc_state_t marks[MARK_STACK_SIZE];
+  int mark;
 } pc_input_t;
+
+pc_input_t *pc_string_input (const char *s) {
+  pc_input_t *i = (pc_input_t*)malloc(sizeof(pc_input_t));
+  i->len = strlen(s);
+  i->state.col = 0;
+  i->state.row = 0;
+  i->state.pos = 0;
+  i->mark = 0;
+  i->str = (char*)malloc(i->len + 1);
+  strcpy(i->str, s);
+  
+  return i;
+}
 
 int pc_input_eof (pc_input_t *i) {
   return i->state.pos == i->len || i->str[i->state.pos] == '\0';
+}
+
+int pc_input_push_mark (pc_input_t *i) {
+  if (i->mark + 1 == MARK_STACK_SIZE) {
+    printf("reahced max!\n");
+    return 0;
+  }
+
+  i->marks[i->mark++] = i->state;
+  return 1;
+}
+
+int pc_input_pop_mark (pc_input_t *i) {
+  if (i->mark == 0) {
+    return 0;
+  }
+
+  i->mark--;
+  return 1;
+}
+
+int pc_input_peek_mark (pc_input_t *i) {
+  if (i->mark == 0) {
+    return 0;
+  }
+
+  i->state = i->marks[i->mark-1];
+  return 1;
 }
 
 typedef struct { char c; }                               pc_data_char_t;
@@ -41,7 +85,7 @@ typedef struct { char a; char b; }                       pc_data_range_t;
 typedef struct { pc_parser_t *p; pc_fold_t f; }          pc_data_some_t;
 typedef struct { pc_parser_t **ps; int n; }              pc_data_any_t;
 typedef struct { pc_parser_t **ps; int n; pc_fold_t f; } pc_data_and_t;
-typedef struct { pc_parser_t *p; pc_apply_t f; }         pc_data_rule_t;
+typedef struct { pc_parser_t *p; pc_apply_t a; }         pc_data_apply_t;
 
 typedef union {
   pc_data_char_t   _char;
@@ -49,7 +93,7 @@ typedef union {
   pc_data_some_t   _some; 
   pc_data_any_t     _any;
   pc_data_and_t     _and;
-  pc_data_rule_t   _rule;
+  pc_data_apply_t _apply;
 } pc_data_t;
 
 typedef struct pc_error_t {
@@ -74,8 +118,6 @@ int pc_parse_match (pc_input_t *i, pc_result_t *r, char c) {
   r->value = malloc(1);
   *((char*)r->value) = c;
 
-  //printf("matched saved char %c\n", *((char*)r->value));
-  
   i->state.col++;
   i->state.pos++;
   
@@ -94,14 +136,14 @@ int pc_parse_no_match (pc_input_t *i) {
 
 pc_parser_t *pc_uninit () {
   pc_parser_t *p = (pc_parser_t*)malloc(sizeof(pc_parser_t));
-  p->type = PC_TYPE_RULE;
   p->name = NULL;
   return p;
 }
 
 pc_parser_t *pc_rule (const char* name) {
   pc_parser_t *p = (pc_parser_t*)malloc(sizeof(pc_parser_t));
-  p->type = PC_TYPE_RULE;
+  p->type = PC_TYPE_APPLY;
+  p->data._apply.a = pc_apply_identity;
   int len = strlen(name);
   p->name = (char*)malloc(len + 1);
   strcpy(p->name, name);
@@ -172,6 +214,16 @@ pc_parser_t *pc_and (pc_fold_t f, int n, ...) {
   return p;
 }
 
+pc_parser_t *pc_apply (pc_apply_t a, pc_parser_t *c) {
+  pc_parser_t *p = pc_uninit();
+  p->type = PC_TYPE_APPLY;
+  p->data._apply.p = c;
+  p->data._apply.a = a;
+
+  return p; 
+}
+
+
 int pc_parse_char (pc_input_t *i, pc_result_t *r, char c) {
   if (pc_input_eof(i) || i->str[i->state.pos] != c) {
     return pc_parse_no_match(i);
@@ -232,32 +284,36 @@ pc_value_t *pc_fold_nat (int n, pc_result_t *r) {
 
 
 int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
-  pc_result_t stk[STACK_SIZE];
+  pc_result_t stk[RESULT_STACK_SIZE];
   int n = 0;
 
   switch (p->type) {
     case PC_TYPE_CHAR:  return pc_parse_char(i, r, p->data._char.c);
     case PC_TYPE_RANGE: return pc_parse_range(i, r, p->data._range.a, p->data._range.b);
+    
     case PC_TYPE_SOME: {
       while (pc_parse_run(i, &stk[n], p->data._some.p, depth+1)) n++;
       r->value = (p->data._some.f)(n, stk); 
+    
       return n != 0;
     }
+
     case PC_TYPE_ANY: {
-      int pos = i->state.pos;
-      int row = i->state.row;
-      int col = i->state.col;
+      pc_input_push_mark(i);
       
-      for (; n < p->data._and.n; n++) {
+      while (n < p->data._and.n) {
         if (pc_parse_run(i, stk, p->data._and.ps[n], depth+1)) {
-          r->value = stk[0].value;
+          r->value = stk->value;
+          pc_input_pop_mark(i);
           return 1;
         } else {
-          i->state.pos = pos;   
-          i->state.row = row;
-          i->state.col = col;
+          pc_input_peek_mark(i);
         }
+    
+        n++;
       }
+
+      pc_input_pop_mark(i);
 
       return 0;
     }
@@ -270,13 +326,15 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
       }
 
       r->value = (p->data._and.f)(n, stk);
+    
       return 1;
     }
-   
-    case PC_TYPE_RULE: {
-      int result = pc_parse_run(i, &stk[0], p->data._rule.p, depth+1);
+
+    case PC_TYPE_APPLY: {
+      int result = pc_parse_run(i, stk, p->data._apply.p, depth+1);
       if (result) {
-        r->value = (p->data._rule.f)(stk);
+        r->value = (p->data._apply.a)(stk);
+      } else {
       }
       return result;
     }
@@ -285,31 +343,37 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
   return 0;  
 }
 
-pc_input_t *pc_string_input (const char *s) {
-  pc_input_t *i = (pc_input_t*)malloc(sizeof(pc_input_t));
-  i->len = strlen(s);
-  i->state.col = 0;
-  i->state.row = 0;
-  i->state.pos = 0;
-  i->str = (char*)malloc(i->len + 1);
-  strcpy(i->str, s);
-  
-  return i;
-}
 
-pc_value_t *pc_apply_add (pc_result_t *r) {
+pc_value_t *pc_apply_binop (pc_result_t *r) {
   void** nest = (void**)r[0].value;
   int a = *((int*)nest[0]);
   int b = *((int*)nest[2]);
-  int* sum = (int*)malloc(sizeof(int));
-  *sum = a + b;
+  char op = *((char*)nest[1]);
+  int* result = (int*)malloc(sizeof(int));
+  
+  switch (op) {
+    case '+': 
+      *result = a + b;
+      printf("adding %d and %d\n", a, b);
+      break;
+    case '-': 
+      *result = a - b;
+      break;
+    case '*': 
+      *result = a * b;
+      printf("multiplying %d and %d\n", a, b);
+      break;
+    case '/': 
+      *result = a / b;
+      break;
+  }
 
   for (int i = 0; i < 3; i++) {
     free(nest[i]);
   }
   free(nest);
 
-  r[0].value = (void*)sum;
+  r[0].value = (void*)result;
   return r[0].value;
 }
 
@@ -317,8 +381,8 @@ pc_value_t *pc_apply_identity (pc_result_t *r) {
   return r[0].value;
 }
 
-void add_no_branching() {
-  const char *s = "1+2+3+4+5";
+void unordered_arithmetic() {
+  const char *s = "1*2+3*4*5";
   pc_input_t *i = pc_string_input(s);
 
   pc_parser_t *dgt = pc_range('0', '9');
@@ -329,16 +393,43 @@ void add_no_branching() {
   pc_parser_t *expr = pc_rule("expr");
   pc_parser_t *term = pc_rule("term");
 
-  expr->data._rule.p = pc_and(pc_fold_concat, 3, num, op_add, term);
-  expr->data._rule.f = pc_apply_add;
+  expr->data._apply.p = pc_and(pc_fold_concat, 3, num, pc_any(2, op_mul, op_add), term);
+  expr->data._apply.a = pc_apply_binop;
 
-  term->data._rule.p = pc_any(2, expr, num);
-  term->data._rule.f = pc_apply_identity;
+  term->data._apply.p = pc_any(2, expr, num);
+  term->data._apply.a = pc_apply_identity;
   
   pc_result_t r;
 
   pc_parse_run(i, &r, expr, 0);
   printf("source: %s, parsed to index %d, parsed out %d\n", s, i->state.pos, *((int*)r.value));
 }
+ void pemdas () {
+   const char *s = "1+2*3+4";
+   pc_input_t *i = pc_string_input(s);
 
+   pc_parser_t *digit = pc_range('0', '9');
+   pc_parser_t *nat = pc_some(pc_fold_nat, digit);
+   pc_parser_t *add = pc_char('+');
+   pc_parser_t *mul = pc_char('*');
 
+   pc_parser_t *expr = pc_rule("expr");
+   pc_parser_t *term = pc_rule("term");
+
+   expr->data._apply.p = pc_any(2, 
+       pc_apply(
+         pc_apply_binop,
+         pc_and(pc_fold_concat, 3, term, add, expr)),
+       term);
+
+   term->data._apply.p = pc_any(2, 
+       pc_apply(
+         pc_apply_binop, 
+         pc_and(pc_fold_concat, 3, nat, mul, nat)),
+       nat);
+
+   pc_result_t r;
+
+   pc_parse_run(i, &r, expr, 0);
+   printf("source: %s, parsed to index %d, parsed out %d\n", s, i->state.pos, *((int*)r.value));
+ }
