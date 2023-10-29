@@ -35,8 +35,6 @@ pc_value_t *pc_apply_identity (pc_result_t *r);
 
 int pc_parse_char  (pc_input_t *i, pc_result_t *r, char c);
 int pc_parse_range (pc_input_t *i, pc_result_t *r, char a, char b);
-int pc_parse_any   (pc_input_t *i, int n, pc_parser_t **ps);
-int pc_parse_rule  (pc_input_t *i, pc_parser_t *p);
 
 int pc_parse_match    (pc_input_t *i, pc_result_t *r, char c);
 int pc_parse_no_match (pc_input_t *i);

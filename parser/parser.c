@@ -189,44 +189,6 @@ int pc_parse_range (pc_input_t *i, pc_result_t *r, char a, char b) {
   }
 }
 
-int pc_parse_any (pc_input_t *i, int n, pc_parser_t **ps) {
-  int pos = i->state.pos;
-  int row = i->state.row;
-  int col = i->state.col;
-
-  for (int j = 0; j < n; j++) {
-    pc_parser_t *p = ps[j];   
-    pc_result_t r;
-    if (pc_parse_run(i, &r, p, 0)) {
-      return 1;
-    } else {
-      i->state.pos = pos;
-      i->state.row = row;
-      i->state.col = col;
-    }
-  }
-  return 0;
-}
-
-
-
-int pc_parse_rule (pc_input_t *i, pc_parser_t *p) {
-  int pos = i->state.pos;
-  int row = i->state.row;
-  int col = i->state.col;
-
-  pc_result_t r;
-  int pass = pc_parse_run(i, &r, p, 0);
-
-  if (!pass) {
-    i->state.pos = pos;
-    i->state.row = row;
-    i->state.col = col;
-  }
-
-  return pass;
-}
-
 pc_value_t *pc_fold_concat (int n, pc_result_t *r) {
   void** concat = (void**)malloc(n * sizeof(void*));
 
@@ -259,11 +221,8 @@ pc_value_t *pc_fold_nat (int n, pc_result_t *r) {
     str[i] = *((char*)r[i].value);
     free(r[i].value);
   }
-  
   int* nat = (int*)malloc(sizeof(int));
   *nat = atoi(str);
-
-  printf("folded %d\n", *nat);
 
   free(str);
   r[0].value = (void*)nat;
@@ -282,7 +241,7 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
     case PC_TYPE_SOME: {
       while (pc_parse_run(i, &stk[n], p->data._some.p, depth+1)) n++;
       r->value = (p->data._some.f)(n, stk); 
-      return n != 0; // make some_1 and some (one needs at least one, one can match 0
+      return n != 0;
     }
     case PC_TYPE_ANY: {
       int pos = i->state.pos;
@@ -291,7 +250,6 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
       
       for (; n < p->data._and.n; n++) {
         if (pc_parse_run(i, stk, p->data._and.ps[n], depth+1)) {
-          printf("matched option %d\n", n);
           r->value = stk[0].value;
           return 1;
         } else {
@@ -305,7 +263,6 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
     }
     
     case PC_TYPE_AND: {
-      if (depth == 5) printf("reached level 5\n");
       for (; n < p->data._and.n; n++) {
         if (!pc_parse_run(i, &stk[n], p->data._and.ps[n], depth+1)) {
           return 0;
@@ -317,9 +274,10 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
     }
    
     case PC_TYPE_RULE: {
-      printf("matching %s at depth %d\n", p->name, depth);
       int result = pc_parse_run(i, &stk[0], p->data._rule.p, depth+1);
-      r->value = (p->data._rule.f)(stk);
+      if (result) {
+        r->value = (p->data._rule.f)(stk);
+      }
       return result;
     }
   }
@@ -343,14 +301,13 @@ pc_value_t *pc_apply_add (pc_result_t *r) {
   void** nest = (void**)r[0].value;
   int a = *((int*)nest[0]);
   int b = *((int*)nest[2]);
-
   int* sum = (int*)malloc(sizeof(int));
   *sum = a + b;
 
   for (int i = 0; i < 3; i++) {
-    //free(nest[i]);
+    free(nest[i]);
   }
-  //free(nest);
+  free(nest);
 
   r[0].value = (void*)sum;
   return r[0].value;
@@ -361,7 +318,7 @@ pc_value_t *pc_apply_identity (pc_result_t *r) {
 }
 
 void add_no_branching() {
-  const char *s = "12+1087+12+123";
+  const char *s = "1+2+3+4+5";
   pc_input_t *i = pc_string_input(s);
 
   pc_parser_t *dgt = pc_range('0', '9');
