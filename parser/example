@@ -32,4 +32,9 @@ match `expr`
 # | -> `int` (3)
  
 
+lisp parser?
 
+term : ( expr args ) | expr
+expr : term  | expr
+term : ident | num
+args : some expr 

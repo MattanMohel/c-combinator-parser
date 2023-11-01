@@ -26,7 +26,6 @@ pc_parser_t *pc_alpha ();
 pc_parser_t *pc_word  ();
 pc_parser_t *pc_digit ();
 pc_parser_t *pc_ident ();
-pc_parser_t *pc_token (pc_parser_t *p);
 
 // parser contructors
 
@@ -36,15 +35,21 @@ int pc_define (pc_parser_t *rule, pc_parser_t *p);
 
 pc_parser_t *pc_char     (char c);
 pc_parser_t *pc_range    (char a, char b);
+pc_parser_t *pc_oneof    (const char* s);
 pc_parser_t *pc_some     (pc_fold_t f, pc_parser_t *c);
 pc_parser_t *pc_at_least (int n, pc_fold_t f, pc_parser_t *c);
 pc_parser_t *pc_any      (int n, ...);
 pc_parser_t *pc_and      (pc_fold_t f, int n, ...);
 pc_parser_t *pc_apply    (pc_apply_t a, pc_parser_t *c);
+pc_parser_t *pc_insert   (const char* s);
+
+void pc_delete_parsers (int n, ...);
+void pc_delete_parser  (pc_parser_t *p);
 
 pc_value_t *pc_fold_concat (int n, pc_result_t *r);
 pc_value_t *pc_fold_str (int n, pc_result_t *r);
 pc_value_t *pc_fold_nat (int n, pc_result_t *r);
+
 pc_value_t *pc_apply_binop (pc_result_t *r);
 pc_value_t *pc_apply_identity (pc_result_t *r);
 
@@ -61,7 +66,8 @@ void pemdas();
 void test();
 
 int main() {
-  pemdas();
+  //pemdas();
+  test();
   return 0;
 }
 
