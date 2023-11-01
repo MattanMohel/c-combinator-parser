@@ -11,7 +11,7 @@ OPT = -O0
 
 # cmake dependency flags
 DEPFLAGS = -MP -MD
-FLAGS    = -Wall -Wextra -g $(foreach D,$(INC),-I$(D)) $(OPT) $(DEPFLAGS)
+FLAGS    = -Wall -Wextra -z noexecstack -g $(foreach D,$(INC),-I$(D)) $(OPT) $(DEPFLAGS)
 
 # create list of c files using the src directories
 FILES = $(foreach D,$(SRC),$(wildcard $(D)/*.c))

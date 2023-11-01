@@ -4,6 +4,10 @@
 #include <string.h>
 #include "parser.h"
 
+// TODO: introduce a way for fold arguments to ignore the result
+// of some of their matches, like being able to "skip" over whitespace
+// without allocating ANY memory for it:w
+
 #define RESULT_STACK_SIZE 12
 #define MARK_STACK_SIZE   128
 
@@ -50,7 +54,15 @@ typedef enum {
   PC_TYPE_AND,
   PC_TYPE_APPLY,
   PC_TYPE_INSERT,
+  PC_TYPE_INSPECT,
 } pc_type_t;
+
+typedef enum pc_error_type_t {
+  PC_INFO,
+  PC_PASS,
+  PC_WARN,
+  PC_FAIL,
+} pc_error_type_t;
 
 typedef struct { char c; }                               pc_data_char_t;
 typedef struct { char a; char b; }                       pc_data_range_t;
@@ -59,10 +71,11 @@ typedef struct { int n; pc_parser_t *p; pc_fold_t f; }   pc_data_least_t;
 typedef struct { pc_parser_t **ps; int n; }              pc_data_any_t;
 typedef struct { pc_parser_t **ps; int n; pc_fold_t f; } pc_data_and_t;
 typedef struct { pc_parser_t *p; pc_apply_t a; }         pc_data_apply_t;
-typedef struct { char* s; int l; }                       pc_data_insert_t;
-typedef struct { char* s; int l; }                       pc_data_anyof_t;
-typedef struct { char* s; int l; }                       pc_data_noneof_t;
+typedef struct { char *s; int l; }                       pc_data_insert_t;
+typedef struct { char *s; int l; }                       pc_data_anyof_t;
+typedef struct { char *s; int l; }                       pc_data_noneof_t;
 typedef struct { }                                       pc_data_pass_t;
+typedef struct { char *s; pc_error_type_t state; }       pc_data_inspect_t;
 
 typedef union {
   pc_data_char_t     _char;
@@ -76,6 +89,7 @@ typedef union {
   pc_data_anyof_t    _anyof;
   pc_data_noneof_t   _noneof;
   pc_data_pass_t     _pass;
+  pc_data_inspect_t  _inspect;
 } pc_data_t;
 
 typedef struct pc_parser_t {
@@ -89,8 +103,8 @@ typedef struct pc_parser_t {
 int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
   pc_result_t stk[RESULT_STACK_SIZE];
   r->value = NULL;
-  int n = 0;
   char c = CHAR(i);
+  int n = 0;
 
   switch (p->type) {
     case PC_TYPE_CHAR:  
@@ -114,8 +128,7 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
     case PC_TYPE_LEAST: 
       pc_input_mark(i);
       while (pc_parse_run(i, &stk[n], p->data._least.p, depth+1)) n++;
-      
-      if (n > p->data._least.n) {
+      if (n < p->data._least.n) {
         for (int i = 0; i < n; i++) free(stk[n].value);
         pc_input_rewind(i);
         pc_input_unmark(i);
@@ -176,6 +189,24 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
     case PC_TYPE_PASS:
       if (pc_input_eof(i)) return 0;
       return pc_parse_match(i, r, c);
+
+    case PC_TYPE_INSPECT:
+      switch (p->data._inspect.state) {
+        case PC_INFO: 
+          printf("INFO (depth-%d): %s\n", depth, p->data._inspect.s);
+          break;
+        case PC_PASS: 
+          printf("PASS (depth-%d): %s\n", depth, p->data._inspect.s);
+          break;
+        case PC_WARN: 
+          printf("WARN (depth-%d): %s\n", depth, p->data._inspect.s);
+          break;
+        case PC_FAIL: 
+          printf("FAIL (depth-%d): %s\n", depth, p->data._inspect.s);
+          break;
+      }
+
+      return 1;
   }
 
   return 0;
@@ -197,6 +228,7 @@ void pc_delete_parser (pc_parser_t *p) {
   switch (p->type) {
     case PC_TYPE_CHAR:
     case PC_TYPE_RANGE:
+    case PC_TYPE_PASS:
       break;
 
     case PC_TYPE_SOME:
@@ -245,6 +277,10 @@ void pc_delete_parser (pc_parser_t *p) {
 
     case PC_TYPE_NONEOF:
       free(p->data._noneof.s);
+      break;
+
+    case PC_TYPE_INSPECT:
+      free(p->data._inspect.s);
       break;
   }
 
@@ -306,7 +342,7 @@ pc_parser_t *pc_some (pc_fold_t f, pc_parser_t *c) {
 
 pc_parser_t *pc_least (int n, pc_fold_t f, pc_parser_t *c) {
   pc_parser_t *p = pc_uninit();
-  p->type = PC_TYPE_SOME;
+  p->type = PC_TYPE_LEAST;
   p->data._least.n = n;
   p->data._least.p = c;
   p->data._least.f = f;
@@ -381,13 +417,24 @@ pc_parser_t *pc_noneof (const char *s) {
   p->type = PC_TYPE_NONEOF;
   p->data._noneof.l = strlen(s);
   p->data._noneof.s = (char*)malloc(p->data._insert.l + 1);
-  strcpy((char*)p->data._noneof.s, s);
+  strcpy(p->data._noneof.s, s);
   return p;
 }
 
 pc_parser_t *pc_pass () {
   pc_parser_t *p = pc_uninit();
   p->type = PC_TYPE_PASS;
+  return p;
+}
+
+pc_parser_t *pc_inspect(pc_error_type_t state, const char *s) {
+  pc_parser_t *p = pc_uninit();
+  p->type = PC_TYPE_INSPECT;
+  p->data._inspect.state = state;
+  
+  int len = strlen(s);
+  p->data._inspect.s = (char*)malloc(len + 1);
+  strcpy(p->data._inspect.s, s);
   return p;
 }
 
@@ -449,6 +496,10 @@ pc_value_t *pc_fold_nat (int n, pc_result_t *r) {
   return (void*)nat;
 }
 
+pc_value_t *pc_apply_identity (pc_result_t *r) {
+  return r[0].value;
+}
+
 pc_value_t *pc_apply_binop (pc_result_t *r) {
   void** nest = (void**)r[0].value;
   int* result = (int*)malloc(sizeof(int));
@@ -481,10 +532,6 @@ pc_value_t *pc_apply_binop (pc_result_t *r) {
   free(nest);
 
   r[0].value = (void*)result;
-  return r[0].value;
-}
-
-pc_value_t *pc_apply_identity (pc_result_t *r) {
   return r[0].value;
 }
 
@@ -622,7 +669,7 @@ void test () {
   pc_result_t r;
 
   pc_value_t *pc_fold_ident (int n, pc_result_t *r) {
-    
+    (void)n;  
     return r[1].value;
   }
 
@@ -638,4 +685,44 @@ void test () {
       (const char*)r.value);
 
   pc_delete_parser(t);
+}
+
+void lisp () {
+  const char *s = "(+ 1 2 3 (+ 1 2 3) (+ a b (+ 1 2))  a b c (+ 1 2))";
+  pc_input_t *i = pc_string_input(s);
+  pc_result_t r;
+  
+  pc_parser_t *token (pc_parser_t *p) {
+    return pc_and(pc_fold_str, 2,
+        pc_some(pc_fold_str, pc_char(' ')),
+        p);
+  }
+
+  pc_parser_t *l_pr = pc_char('(');
+  pc_parser_t *r_pr = pc_char(')');
+  pc_parser_t *ident = pc_least(1, pc_fold_str, pc_range('a', 'z'));
+  pc_parser_t *num   = pc_least(1, pc_fold_str, pc_range('0', '9'));
+
+  pc_parser_t *term = pc_rule("term");
+  pc_parser_t *expr = pc_rule("expr");
+  
+  pc_define(expr, pc_any(2, 
+        pc_and(pc_fold_str, 3, 
+          token(l_pr), 
+          term, 
+          token(r_pr)), 
+        term));
+
+  pc_define(term, pc_and(pc_fold_str, 2,
+        token(pc_anyof("+")), 
+        pc_some(pc_fold_str, token(pc_any(3, ident, num, expr))))); 
+
+  pc_parse_run(i, &r, expr, 0);
+
+  printf("source: %s, parsed to index %d out of %d\n", 
+      s, 
+      i->state.pos, 
+      i->len);
+
+  pc_delete_parsers(2, expr, term);
 }
