@@ -13,7 +13,7 @@ typedef enum pc_error_type_t pc_error_type_t;
 typedef void pc_value_t;
 
 typedef pc_value_t*(*pc_fold_t)(int, pc_result_t*);
-typedef pc_value_t*(*pc_apply_t)(pc_result_t*);
+typedef pc_value_t*(*pc_map_t)(pc_result_t*);
 
 pc_input_t *pc_string_input (const char *s);
 int pc_input_eof (pc_input_t *i);
@@ -21,12 +21,6 @@ int pc_input_eof (pc_input_t *i);
 int pc_input_mark (pc_input_t *i);
 int pc_input_unmark (pc_input_t *i);
 int pc_input_rewind (pc_input_t *i);
-
-
-pc_parser_t *pc_alpha ();
-pc_parser_t *pc_word  ();
-pc_parser_t *pc_digit ();
-pc_parser_t *pc_ident ();
 
 // parser contructors
 
@@ -38,12 +32,14 @@ pc_parser_t *pc_char     (char c);
 pc_parser_t *pc_range    (char a, char b);
 pc_parser_t *pc_oneof    (const char *s);
 pc_parser_t *pc_noneof   (const char *s);
-pc_parser_t *pc_pass     ();
+pc_parser_t *pc_string   (const char *s);
+pc_parser_t *pc_any      ();
 pc_parser_t *pc_some     (pc_fold_t f, pc_parser_t *c);
-pc_parser_t *pc_least    (int n, pc_fold_t f, pc_parser_t *c);
-pc_parser_t *pc_any      (int n, ...);
-pc_parser_t *pc_and      (pc_fold_t f, int n, ...);
-pc_parser_t *pc_apply    (pc_apply_t a, pc_parser_t *c);
+pc_parser_t *pc_more     (pc_fold_t f, int n, pc_parser_t *c);
+pc_parser_t *pc_repeat   (pc_fold_t f, int n, pc_parser_t *c);
+pc_parser_t *pc_choose   (int n, ...);
+pc_parser_t *pc_chain    (pc_fold_t f, int n, ...);
+pc_parser_t *pc_apply    (pc_map_t a, pc_parser_t *c);
 pc_parser_t *pc_insert   (const char *s);
 pc_parser_t *pc_inspect  (pc_error_type_t state, const char *s);
 
@@ -67,13 +63,14 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth);
 
 
 void pemdas();
-void test();
 void lisp();
+void grammar();
 
 int main() {
   //pemdas();
   /*test();*/
-  lisp();
+  /*lisp();*/
+  grammar();
   return 0;
 }
 
