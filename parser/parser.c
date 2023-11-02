@@ -9,14 +9,8 @@
 // without allocating ANY memory for it
 
 
-// RENAME: 
-// - oneof -> oneof
-// - any   -> choose
-// - and   -> chain
-// - pass  -> any       
-
-#define RESULT_STACK_SIZE 12
-#define MARK_STACK_SIZE   128
+#define RESULT_STACK_SIZE 24
+#define MARK_STACK_SIZE   24
 
 #define CHAR(i) i->str[i->state.pos]
 
@@ -110,8 +104,6 @@ typedef struct pc_parser_t {
   pc_data_t data;
 } pc_parser_t;
 
-// a recursive function that takes maps an input by a parser
-// NOTE: a failed parser match MUST free any of its allocated memory
 int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
   pc_result_t stk[RESULT_STACK_SIZE];
   r->value = NULL;
@@ -275,35 +267,35 @@ void pc_delete_parser (pc_parser_t *p) {
 
     case PC_SOME:
       if (p->data._some.p->name == NULL) {
-        free(p->data._some.p);
+        pc_delete_parser(p->data._some.p);
       }
       break;
     
     case PC_MORE:
       if (p->data._more.p->name == NULL) {
-        free(p->data._more.p);
+        pc_delete_parser(p->data._more.p);
       }
       break;
 
     case PC_REPEAT:
       if (p->data._repeat.p->name == NULL) {
-        free(p->data._more.p);
+        pc_delete_parser(p->data._more.p);
       }
       break;
     
     case PC_CHOOSE:
       for (int i = 0; i < p->data._choose.n; i++) {
         if (p->data._choose.ps[i]->name == NULL) {
-          free(p->data._choose.ps[i]);
+          pc_delete_parser(p->data._choose.ps[i]);
         }
       }
-      free(p->data._choose.ps);
+      pc_delete_parser(p->data._choose.ps);
       break;
     
     case PC_CHAIN: 
       for (int i = 0; i < p->data._chain.n; i++) {
         if (p->data._chain.ps[i]->name == NULL) {
-          free(p->data._chain.ps[i]);
+          pc_delete_parser(p->data._chain.ps[i]);
         }
       }
       free(p->data._chain.ps);
@@ -311,7 +303,7 @@ void pc_delete_parser (pc_parser_t *p) {
     
     case PC_APPLY:
       if (p->data._apply.p->name == NULL) {
-        free(p->data._apply.p);
+        pc_delete_parser(p->data._apply.p);
       }
       break;
 
@@ -808,4 +800,6 @@ void grammar () {
       s, 
       i->state.pos, 
       i->len);
+
+  pc_delete_parsers(3, bind, expr, term);
 }
