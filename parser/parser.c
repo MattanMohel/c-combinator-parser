@@ -246,7 +246,7 @@ void pc_delete_parsers (int n, ...) {
   va_list ps;
   va_start(ps, n);
 
-  for (int i = 0; i <  n; i++) {
+  for (int i = 0; i < n; i++) {
     pc_parser_t *p = va_arg(ps, pc_parser_t*);
     pc_delete_parser(p);
   }
@@ -289,7 +289,7 @@ void pc_delete_parser (pc_parser_t *p) {
           pc_delete_parser(p->data._choose.ps[i]);
         }
       }
-      pc_delete_parser(p->data._choose.ps);
+      free(p->data._choose.ps);
       break;
     
     case PC_CHAIN: 
@@ -594,19 +594,6 @@ pc_value_t *pc_apply_binop (pc_result_t *r) {
   return r[0].value;
 }
 
-pc_input_t *pc_string_input (const char *s) {
-  pc_input_t *i = (pc_input_t*)malloc(sizeof(pc_input_t));
-  i->len = strlen(s);
-  i->state.col = 0;
-  i->state.row = 0;
-  i->state.pos = 0;
-  i->mark = 0;
-  i->str = (char*)malloc(i->len + 1);
-  strcpy(i->str, s);
-  
-  return i;
-}
-
 int pc_parse_match (pc_input_t *i, pc_result_t *r, char c) {
   r->value = malloc(2);
   ((char*)r->value)[0] = c;
@@ -623,6 +610,20 @@ int pc_parse_match (pc_input_t *i, pc_result_t *r, char c) {
 
   return 1;
 }
+
+pc_input_t *pc_string_input (const char *s) {
+  pc_input_t *i = (pc_input_t*)malloc(sizeof(pc_input_t));
+  i->len = strlen(s);
+  i->state.col = 0;
+  i->state.row = 0;
+  i->state.pos = 0;
+  i->mark = 0;
+  i->str = (char*)malloc(i->len + 1);
+  strcpy(i->str, s);
+  
+  return i;
+}
+
 
 int pc_input_eof (pc_input_t *i) {
   return i->state.pos == i->len || i->str[i->state.pos] == '\0';
@@ -697,7 +698,7 @@ void pemdas () {
 }
 
 void lisp () {
-  const char *s = "(+ 1 2 3 (+ 1 2 3) (+ a b (+ 1 2))  a b c (+ 1 2))";
+  const char *s = "(12)";
   pc_input_t *i = pc_string_input(s);
   pc_result_t r;
   
@@ -705,6 +706,28 @@ void lisp () {
     return pc_chain(pc_fold_str, 2,
         pc_some(pc_fold_str, pc_char(' ')),
         p);
+  }
+
+  pc_value_t *map_node (pc_result_t *r) {
+    return (void*)pc_node("test");
+  }
+
+  pc_value_t *fold_node (int n, pc_result_t *r) {
+    printf("folded %d\n", n);
+    pc_node_t *node = pc_node("unamed");
+
+    for (int i = 0; i < n; i++) {
+      printf("pushed %s\n", ((pc_node_t*)(&(r[i].value)))->str);
+      /*pc_push_node(node, (pc_node_t*)(result + i));*/
+    }
+
+    return node;
+  }
+
+  pc_value_t *fold_discard (int n, pc_result_t *r) {
+    /*printf("have %d, discarding\n", n);*/
+    pc_ast_put((pc_node_t*)r[1].value);
+    return r[1].value;
   }
 
   pc_parser_t *l_pr = pc_char('(');
@@ -715,18 +738,19 @@ void lisp () {
   pc_parser_t *term = pc_rule("term");
   pc_parser_t *expr = pc_rule("expr");
   
-  pc_define(expr, pc_choose(2, 
-        pc_chain(pc_fold_str, 3, 
-          token(l_pr), 
-          term, 
-          token(r_pr)), 
-        term));
+  pc_define(expr, 
+    pc_choose(2, 
+      pc_chain(fold_discard, 3, 
+        token(l_pr), 
+        pc_some(fold_node, pc_apply(map_node, pc_range('0', '9'))), //pc_some(fold_node, term), 
+        token(r_pr)), 
+      term));
 
-  pc_define(term, pc_chain(pc_fold_str, 2,
-        token(pc_oneof("+")), 
-        pc_some(pc_fold_str, token(pc_choose(3, ident, num, expr))))); 
+  pc_define(term, pc_apply(map_node, token(pc_choose(2, ident, num)))); 
 
   pc_parse_run(i, &r, expr, 0);
+
+  /*pc_ast_put((pc_node_t*)(&r));*/
 
   printf("source: %s, parsed to index %d out of %d\n", 
       s, 
@@ -734,6 +758,71 @@ void lisp () {
       i->len);
 
   pc_delete_parsers(2, expr, term);
+}
+
+void test() {
+  const char *s = "(add 1 2 (sub (add 1 2) 3 4) (mul 1 2))";
+  pc_input_t *i = pc_string_input(s);
+
+  pc_value_t *map_node(pc_result_t *r) {
+    pc_node_t *node = pc_node((char*)r->value);
+    free(r->value);
+    return node;
+  }
+
+  pc_value_t *fold_node(int n, pc_result_t *r) {
+    pc_node_t *head = (pc_node_t*)r[0].value;
+    for (int i = 1; i < n; i++) {
+      pc_push_node(head, (pc_node_t*)r[i].value);
+    }
+    return head;
+  }
+
+  pc_value_t *choose_node(int n, pc_result_t *r) {
+    return r[1].value;
+  }
+
+  pc_value_t *choose_second (pc_result_t *r) {
+    return r[1].value;
+  }
+
+  pc_parser_t *tok (pc_parser_t *p) {
+    return pc_chain(choose_node, 
+        2, 
+        pc_some(pc_fold_str, pc_char(' ')), 
+        p);
+  }
+
+  pc_parser_t *alpha = pc_more(pc_fold_str, 1, pc_range('a', 'z'));
+  pc_parser_t *num = pc_more(pc_fold_str, 1, pc_range('0', '9'));
+
+  pc_parser_t *expr = pc_rule("expr");
+  pc_parser_t *term = pc_rule("term");
+
+  pc_define(expr, 
+      pc_chain(choose_node, 3, 
+        pc_char('('), 
+        pc_some(fold_node, 
+          pc_choose(2, 
+            pc_apply(map_node, tok(term)),
+            tok(expr))),            
+        pc_char(')')));
+
+  pc_define(term,
+      pc_choose(2, num, alpha));
+
+  pc_result_t r;
+
+  int result = pc_parse_run(i, &r, expr, 0);
+
+  if (result == 0)  {
+    printf("failed!\n");
+  } else {
+    printf("succeeded!\n");
+    pc_ast_put(r.value);
+  }
+
+  printf("source: %s, parsed to index %d of %d\n", s, i->state.pos, i->len);
 }
 
 void grammar () {

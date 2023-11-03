@@ -2,6 +2,7 @@
 #define _PARSER_H_
 
 #include <stdio.h>
+#include "ast.h"
 
 // TODO: reference counted parser/void* allocations
 
@@ -61,16 +62,27 @@ int pc_parse_range (pc_input_t *i, pc_result_t *r, char a, char b);
 int pc_parse_match    (pc_input_t *i, pc_result_t *r, char c);
 int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth);
 
-
 void pemdas();
 void lisp();
+void test();
 void grammar();
 
 int main() {
   //pemdas();
   /*test();*/
   /*lisp();*/
-  grammar();
+  /*grammar();*/
+  test();
+
+  /*pc_node_t *a = pc_node("a");*/
+  /*pc_node_t *b = pc_node("b");*/
+  /*pc_node_t *c = pc_node("c");*/
+
+  /*pc_push_nodes(a, 2, b, c);*/
+  /*pc_push_node(c, b);*/
+
+  /*pc_ast_put(a);*/
+
   return 0;
 }
 
