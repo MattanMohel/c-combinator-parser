@@ -25,10 +25,10 @@ typedef struct {
 
 typedef struct pc_input_t {
   char *str;
-  int len;
+  int   len;
+  int   mark;
   pc_state_t state;
   pc_state_t marks[MARK_STACK_SIZE];
-  int mark;
 } pc_input_t;
 
 typedef struct pc_error_t {
@@ -100,6 +100,7 @@ typedef union {
 
 typedef struct pc_parser_t {
   char* name;
+  int   ref_count;
   pc_type_t type;
   pc_data_t data;
 } pc_parser_t;
@@ -111,15 +112,17 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
   int n = 0;
 
   switch (p->type) {
-    case PC_CHAR:  
+    case PC_CHAR: {                   
       if (pc_input_eof(i) || c != p->data._char.c) return 0;
       return pc_parse_match(i, r, c);
+    }
 
-    case PC_RANGE: 
+    case PC_RANGE: {
       if (pc_input_eof(i) || c < p->data._range.a || c > p->data._range.b) return 0;
       return pc_parse_match(i, r, c);
+    }
 
-    case PC_STRING:
+    case PC_STRING: {
       pc_input_mark(i);
       while (n < p->data._string.l) {
         if (pc_input_eof(i) || CHAR(i) != p->data._string.s[n]) {
@@ -134,18 +137,21 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
       r->value = malloc(n + 1);
       strcpy((char*)r->value, p->data._string.s);
       return 1;
+    }
 
-    case PC_INSERT:
+    case PC_INSERT: {
       r->value = malloc(p->data._insert.l+1);
       strcpy(r->value, p->data._insert.s);
       return 1;
+    }
 
-    case PC_SOME: 
+    case PC_SOME: {
       while (pc_parse_run(i, &stk[n], p->data._some.p, depth+1)) n++;
       r->value = (p->data._some.f)(n, stk);  
       return 1;
+    }
     
-    case PC_MORE: 
+    case PC_MORE: {
       pc_input_mark(i);
       while (pc_parse_run(i, &stk[n], p->data._more.p, depth+1)) n++;
       if (n < p->data._more.n) {
@@ -157,8 +163,9 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
 
       r->value = (p->data._more.f)(n, stk); 
       return 1;
+    }
 
-   case PC_REPEAT:
+   case PC_REPEAT: {
       pc_input_mark(i);
       while (n < p->data._repeat.n && pc_parse_run(i, &stk[n], p->data._repeat.p, depth+1)) n++;
       if (n < p->data._repeat.n) {
@@ -170,8 +177,9 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
 
       r->value = (p->data._repeat.f)(n, stk);
       return 1;
+    }
     
-    case PC_CHOOSE: 
+    case PC_CHOOSE: {
       pc_input_mark(i);
       while (n < p->data._chain.n) {
         if (pc_parse_run(i, stk, p->data._chain.ps[n], depth+1)) {
@@ -185,8 +193,9 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
 
       pc_input_unmark(i);
       return 0;
+    }
     
-    case PC_CHAIN: 
+    case PC_CHAIN: {
       while (n < p->data._chain.n) {
         if (!pc_parse_run(i, &stk[n], p->data._chain.ps[n], depth+1)) {
           for (int i = 0; i < n; i++) free(stk[n].value);
@@ -197,33 +206,38 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
 
       r->value = (p->data._chain.f)(n, stk);
       return 1;
+    }
 
-    case PC_APPLY: 
+    case PC_APPLY: {
       if (pc_parse_run(i, stk, p->data._apply.p, depth+1)) {
         r->value = (p->data._apply.a)(stk);
         return 1;
       }
       return 0;
+    }
 
-    case PC_ONEOF:
+    case PC_ONEOF: {
       while (n < p->data._oneof.l) {
         if (c == p->data._oneof.s[n]) return pc_parse_match(i, r, c);
         n++;
       }
       return 0;
+    }
 
-    case PC_NONEOF:
+    case PC_NONEOF: {
       while (n < p->data._noneof.l) {
         if (c == p->data._noneof.s[n]) return 0;
         n++;
       }
       return pc_parse_match(i, r, c);
+    }
 
-    case PC_ANY:
+    case PC_ANY: {
       if (pc_input_eof(i)) return 0;
       return pc_parse_match(i, r, c);
+    }
 
-    case PC_INSPECT:
+    case PC_INSPECT: {
       switch (p->data._inspect.state) {
         case PC_INFO: 
           printf("INFO (depth-%d): %s\n", depth, p->data._inspect.s);
@@ -237,6 +251,7 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
       }
 
       return 1;
+    }
   }
 
   return 0;
@@ -266,45 +281,33 @@ void pc_delete_parser (pc_parser_t *p) {
       break;
 
     case PC_SOME:
-      if (p->data._some.p->name == NULL) {
-        pc_delete_parser(p->data._some.p);
-      }
+      pc_remove_parser(p->data._some.p);
       break;
     
     case PC_MORE:
-      if (p->data._more.p->name == NULL) {
-        pc_delete_parser(p->data._more.p);
-      }
+      pc_remove_parser(p->data._more.p);
       break;
 
     case PC_REPEAT:
-      if (p->data._repeat.p->name == NULL) {
-        pc_delete_parser(p->data._more.p);
-      }
+      pc_remove_parser(p->data._more.p);
       break;
     
     case PC_CHOOSE:
       for (int i = 0; i < p->data._choose.n; i++) {
-        if (p->data._choose.ps[i]->name == NULL) {
-          pc_delete_parser(p->data._choose.ps[i]);
-        }
+        pc_remove_parser(p->data._choose.ps[i]);
       }
       free(p->data._choose.ps);
       break;
     
     case PC_CHAIN: 
       for (int i = 0; i < p->data._chain.n; i++) {
-        if (p->data._chain.ps[i]->name == NULL) {
-          pc_delete_parser(p->data._chain.ps[i]);
-        }
+        pc_remove_parser(p->data._chain.ps[i]);
       }
       free(p->data._chain.ps);
       break;
     
     case PC_APPLY:
-      if (p->data._apply.p->name == NULL) {
-        pc_delete_parser(p->data._apply.p);
-      }
+      pc_remove_parser(p->data._apply.p);
       break;
 
     case PC_INSERT:
@@ -327,8 +330,14 @@ void pc_delete_parser (pc_parser_t *p) {
   free(p);
 }
 
+void pc_remove_parser (pc_parser_t *p) {
+  p->ref_count--;
+  if (p->ref_count == 0) pc_delete_parser(p);
+}
+
 pc_parser_t *pc_uninit () {
   pc_parser_t *p = (pc_parser_t*)malloc(sizeof(pc_parser_t));
+  p->ref_count = 0;
   p->name = NULL;
   return p;
 }
@@ -385,6 +394,8 @@ pc_parser_t *pc_some (pc_fold_t f, pc_parser_t *c) {
   p->type = PC_SOME;
   p->data._some.p = c;
   p->data._some.f = f;
+  
+  c->ref_count++;
 
   return p;
 }
@@ -396,6 +407,8 @@ pc_parser_t *pc_more (pc_fold_t f, int n, pc_parser_t *c) {
   p->data._more.p = c;
   p->data._more.f = f;
 
+  c->ref_count++;
+
   return p;
 }
 
@@ -405,6 +418,8 @@ pc_parser_t *pc_repeat (pc_fold_t f, int n, pc_parser_t *c) {
   p->data._repeat.n = n;
   p->data._repeat.p = c;
   p->data._repeat.f = f;
+
+  c->ref_count++;
 
   return p;
 }
@@ -419,7 +434,9 @@ pc_parser_t *pc_choose (int n, ...) {
   va_start(ps, n);
 
   for (int i = 0; i < n; i++) {
-    p->data._choose.ps[i] = va_arg(ps, pc_parser_t*);
+    pc_parser_t *c = va_arg(ps, pc_parser_t*);
+    p->data._choose.ps[i] = c;
+    c->ref_count++;
   }
 
   va_end(ps);
@@ -437,7 +454,9 @@ pc_parser_t *pc_chain (pc_fold_t f, int n, ...) {
   va_start(ps, n);
 
   for (int i = 0; i < n; i++) {
-    p->data._chain.ps[i] = va_arg(ps, pc_parser_t*);
+    pc_parser_t *c = va_arg(ps, pc_parser_t*);
+    p->data._chain.ps[i] = c;
+    c->ref_count++;
   }
 
   va_end(ps);
@@ -450,6 +469,8 @@ pc_parser_t *pc_apply (pc_map_t a, pc_parser_t *c) {
   p->data._apply.p = c;
   p->data._apply.a = a;
 
+  c->ref_count++;
+
   return p; 
 }
 
@@ -459,6 +480,7 @@ pc_parser_t *pc_insert (const char *s) {
   p->data._insert.l = strlen(s);
   p->data._insert.s = (char*)malloc(p->data._insert.l + 1);
   strcpy((char*)p->data._insert.s, s);
+
   return p;
 }
 
@@ -468,6 +490,7 @@ pc_parser_t *pc_oneof (const char *s) {
   p->data._oneof.l = strlen(s);
   p->data._oneof.s = (char*)malloc(p->data._insert.l + 1);
   strcpy((char*)p->data._oneof.s, s);
+
   return p;
 }
 
@@ -477,12 +500,14 @@ pc_parser_t *pc_noneof (const char *s) {
   p->data._noneof.l = strlen(s);
   p->data._noneof.s = (char*)malloc(p->data._insert.l + 1);
   strcpy(p->data._noneof.s, s);
+
   return p;
 }
 
 pc_parser_t *pc_any () {
   pc_parser_t *p = pc_uninit();
   p->type = PC_ANY;
+
   return p;
 }
 
@@ -494,24 +519,8 @@ pc_parser_t *pc_inspect(pc_error_type_t state, const char *s) {
   int len = strlen(s);
   p->data._inspect.s = (char*)malloc(len + 1);
   strcpy(p->data._inspect.s, s);
+
   return p;
-}
-
-int pc_parse_char (pc_input_t *i, pc_result_t *r, char c) {
-  if (pc_input_eof(i) || i->str[i->state.pos] != c) {
-    return 0;
-  } else {
-    return pc_parse_match(i, r, c);
-  }
-}
-
-int pc_parse_range (pc_input_t *i, pc_result_t *r, char a, char b) {
-  char c = i->str[i->state.pos];
-  if (pc_input_eof(i) || c < a || c > b) {
-    return 0;
-  } else {
-    return pc_parse_match(i, r, c);
-  }
 }
 
 pc_value_t *pc_fold_concat (int n, pc_result_t *r) {
@@ -800,7 +809,7 @@ void test() {
   pc_parser_t *term = pc_rule("term");
 
   pc_define(expr, 
-      pc_chain(choose_node, 3, 
+      pc_chain(choose_node, 3,
         pc_char('('), 
         pc_some(fold_node, 
           pc_choose(2, 

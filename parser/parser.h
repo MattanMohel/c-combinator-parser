@@ -46,6 +46,7 @@ pc_parser_t *pc_inspect  (pc_error_type_t state, const char *s);
 
 void pc_delete_parsers (int n, ...);
 void pc_delete_parser  (pc_parser_t *p);
+void pc_remove_parser (pc_parser_t *p);
 
 pc_value_t *pc_fold_concat (int n, pc_result_t *r);
 pc_value_t *pc_fold_str (int n, pc_result_t *r);
@@ -53,11 +54,6 @@ pc_value_t *pc_fold_nat (int n, pc_result_t *r);
 
 pc_value_t *pc_apply_binop (pc_result_t *r);
 pc_value_t *pc_apply_identity (pc_result_t *r);
-
-// parser functions 
-
-int pc_parse_char  (pc_input_t *i, pc_result_t *r, char c);
-int pc_parse_range (pc_input_t *i, pc_result_t *r, char a, char b);
 
 int pc_parse_match    (pc_input_t *i, pc_result_t *r, char c);
 int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth);
