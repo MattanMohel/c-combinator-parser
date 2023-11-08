@@ -20,8 +20,16 @@
 #define VEC_PUSH(V, E) vec_fit((void**)&V, sizeof(V[0])); *(V + VEC_LEN(V)++) = E
 #define VEC_FREE(V) free(VEC_LOC(V))
 
+#define STR_NEW(dest, src) dest = str_new(s)
+#define STR_CPY(dest, src) dest = str_cpy(dest, src)
+#define STR_CAT(dest, src) dest = str_cat(dest, src)
+
 void *vec_new     (int cap, int stride);
 void *vec_fit     (void** buf, int stride);
 void *vec_realloc (void** buf, int stride, int len);
+
+char *str_new (char *src);
+char *str_cat (char *dest, const char *src);
+char *str_cpy (char *dest, const char *src);
 
 #endif

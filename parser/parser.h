@@ -57,6 +57,10 @@ pc_parser_t *pc_and    (pc_fold_fn f, int n, ...);
 pc_parser_t *pc_or     (int n, ...);
 pc_parser_t *pc_apply  (pc_apply_fn f, pc_parser_t *x);
 
+void pc_push_err (pc_value_t *r, const char *mes);
+void pc_push_err_fmt (pc_value_t *r, const char *mes, ...);
+void pc_delete_err (pc_result_t *r);
+
 void pc_delete_parsers (int n, ...);
 void pc_delete_parser  (pc_parser_t *p);
 void pc_deref_parser   (pc_parser_t *p);
