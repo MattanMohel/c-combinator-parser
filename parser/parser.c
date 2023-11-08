@@ -5,12 +5,10 @@
 #include "parser.h"
 #include "strop.h"
 
-// TODO:
-// 1) make result and mark stack growble
-// 2) have `and`, `many`, and `count` (all parsers that can fail partially) take
-//    a `free` function to release their memory
-#define RESULT_STACK_SIZE 24
-#define MARK_STACK_SIZE   24
+// TODO: add error messages
+
+#define STACK_SIZE 32
+#define TRY(x) if (!x) { return 0; }
 
 typedef struct pc_state_t {
   char *ptr;
@@ -24,7 +22,7 @@ typedef struct pc_input_t {
   int len;
   int mark;
   pc_state_t state;
-  pc_state_t marks[MARK_STACK_SIZE];
+  pc_state_t marks[STACK_SIZE];
 } pc_input_t;
 
 enum {
@@ -50,7 +48,7 @@ enum {
   PC_LIST,
   PC_NONE
 };
-  
+
 
 typedef struct { char *x; } pc_string_t;
 typedef struct { char x; char y; } pc_chars_t;
@@ -94,8 +92,8 @@ int pc_input_eof (pc_input_t *i) {
 }
 
 int pc_input_mark (pc_input_t *i) {
-  if (i->mark + 1 == MARK_STACK_SIZE) {
-    printf("reahced max!\n");
+  if (i->mark + 1 == STACK_SIZE) {
+    printf("overflowed input stack!\n");
     return 0;
   }
 
@@ -149,7 +147,7 @@ void *pc_parse (const char *str, pc_parser_t *p) {
 }
 
 int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
-  pc_result_t stk[RESULT_STACK_SIZE];
+  pc_result_t stk[STACK_SIZE];
   r->value = NULL;
   int n = 0;
 
@@ -167,7 +165,7 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
       return 1;
     
     case PC_TYPE_MORE: 
-      pc_input_mark(i);
+      TRY(pc_input_mark(i));
       while (pc_parse_run(i, stk+n, p->data.repeat.x, depth+1)) { n++; }
       if (n < p->data.repeat.n) {
         for (int i = 0; i < n; i++) { (p->data.repeat.d)(stk[n].value); }
@@ -179,7 +177,7 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
       return 1;
 
    case PC_TYPE_COUNT: 
-      pc_input_mark(i);
+      TRY(pc_input_mark(i));
       while (pc_parse_run(i, stk+n, p->data.repeat.x, depth+1)) { 
         if (n > p->data.repeat.n) { 
           for (int i = 0; i < n; i++) { (p->data.repeat.d)(stk[n].value); }
@@ -192,8 +190,10 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
       r->value = (p->data.repeat.f)(n, stk);
       return 1;
     
+    // TODO: shouldn't need input rewind here
+    // figure out why it doesn't work without it 
     case PC_TYPE_OR: 
-      pc_input_mark(i);
+      TRY(pc_input_mark(i));
       while (n < p->data.or.n) {
         if (pc_parse_run(i, stk, p->data.or.xs[n], depth+1)) {
           r->value = stk->value;
@@ -228,10 +228,11 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
   }
 }
 
-
 int pc_parse_char (pc_input_t *i, pc_result_t *r, pc_data_t *d) {
   char c = *i->state.ptr;
-  if (pc_input_eof(i) || c != d->chars.x) { return 0; }
+  if (pc_input_eof(i) || c != d->chars.x) { 
+    return 0; 
+  }
   return pc_parse_match(i, r, c);
 }
 
@@ -393,7 +394,7 @@ pc_parser_t *pc_and (pc_fold_fn f, int n, ...) {
   p->data.and.n = n;
   p->data.and.f = f;
   p->data.and.xs = (pc_parser_t**)malloc(n * sizeof(pc_parser_t*));
-  p->data.and.ds = (pc_dtor_fn**)malloc(n * sizeof(pc_dtor_fn*));
+  p->data.and.ds = (pc_dtor_fn*)malloc(n * sizeof(pc_dtor_fn*));
 
   va_list xs;
   va_start(xs, n);
@@ -448,6 +449,30 @@ pc_parser_t *pc_any (void) {
   p->type = PC_TYPE_ANY;
 
   return p;
+}
+
+void pc_push_err (pc_result_t *r, const char *mes) {
+  r->error = (pc_error_t*)malloc(sizeof(pc_error_t));
+  r->error->mes = pc_strcpy(mes);
+}
+
+void pc_push_err_fmt (pc_result_t *r, const char *mes, ...) {
+  va_list fmt;
+  va_start(fmt, mes);
+
+  size_t size = vsnprintf(NULL, 0, mes, fmt);
+  char *buf = malloc(size+1);
+  vsnprintf(buf, size+1, mes, fmt);
+
+  va_end(fmt);
+
+  r->error = (pc_error_t*)malloc(sizeof(pc_error_t));
+  r->error->mes = buf;
+}
+
+void pc_delete_err (pc_result_t *r) {
+  free(r->error->mes);
+  free(r->error);
 }
 
 void pc_delete_parsers (int n, ...) {

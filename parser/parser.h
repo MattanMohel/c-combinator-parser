@@ -33,12 +33,12 @@ int pc_parse_match  (pc_input_t *i, pc_result_t *r, char c);
 void *pc_parse (const char* str, pc_parser_t* p);
 int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth);
 
-int pc_parse_char    (pc_input_t *i, pc_result_t *r, pc_data_t *d);
-int pc_parse_range   (pc_input_t *i, pc_result_t *r, pc_data_t *d);
-int pc_parse_string  (pc_input_t *i, pc_result_t *r, pc_data_t *d);
-int pc_parse_oneof   (pc_input_t *i, pc_result_t *r, pc_data_t *d);
-int pc_parse_noneof  (pc_input_t *i, pc_result_t *r, pc_data_t *d);
-int pc_parse_any     (pc_input_t *i, pc_result_t *r, pc_data_t *d);
+int pc_parse_char   (pc_input_t *i, pc_result_t *r, pc_data_t *d);
+int pc_parse_range  (pc_input_t *i, pc_result_t *r, pc_data_t *d);
+int pc_parse_string (pc_input_t *i, pc_result_t *r, pc_data_t *d);
+int pc_parse_oneof  (pc_input_t *i, pc_result_t *r, pc_data_t *d);
+int pc_parse_noneof (pc_input_t *i, pc_result_t *r, pc_data_t *d);
+int pc_parse_any    (pc_input_t *i, pc_result_t *r, pc_data_t *d);
 
 pc_parser_t *pc_undefined (void);
 pc_parser_t *pc_new (const char* name);
