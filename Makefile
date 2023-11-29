@@ -1,7 +1,7 @@
 # name of binary 
 BIN = bin
 
-LIB =
+LIB =m
 SRC =.
 INC =.
 ARG = 

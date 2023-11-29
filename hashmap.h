@@ -26,7 +26,6 @@ typedef struct hashmap {
 hashmap *hmap_new ();
 void hmap_delete  (hashmap *hmap);
 void hmap_delete_entry (entry *e);
-
 entry *hmap_entry_new (char *key, void *value);
 
 void *hmap_add  (hashmap *hmap, char *key, void *value);
