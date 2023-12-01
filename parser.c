@@ -204,7 +204,7 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
     case PC_TYPE_ONEOF:  return pc_parse_oneof(i, r, &p->data);
     case PC_TYPE_STRING: return pc_parse_string(i, r, &p->data);
     case PC_TYPE_NONEOF: return pc_parse_noneof(i, r, &p->data);
-    case PC_TYPE_ANY:    return pc_parse_any(i, r, &p->data);
+    case PC_TYPE_ANY:    return pc_parse_any(i, r);
 
     // TODO: free error variants!!!
 
@@ -247,11 +247,10 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
         } 
         n++;
       }
-      pc_input_unmark(i);
       return pc_err(r, "%s", pc_err_merge(stk, ", or ", n));
       
     case PC_TYPE_AND: 
-      TRY(pc_input_mark(i));
+      pc_input_mark(i);
       while (n < p->data.and.n) {
         if (!pc_parse_run(i, stk+n, p->data.and.xs[n], depth+1)) {
           for (int i = 0; i < n; i++) { (p->data.and.ds[i])(stk[i].value); }
@@ -261,6 +260,7 @@ int pc_parse_run (pc_input_t *i, pc_result_t *r, pc_parser_t *p, int depth) {
         }
         n++;
       }
+      pc_input_unmark(i);
       r->value = (p->data.and.f)(n, stk);
       return 1;
 
@@ -332,6 +332,8 @@ int pc_parse_string (pc_input_t *i, pc_result_t *r, pc_data_t *d) {
 }
 
 int pc_parse_oneof (pc_input_t *i, pc_result_t *r, pc_data_t *d) {
+  if (pc_input_eof(i)) { return pc_err(r, "reached EOF!"); }
+
   for (char *c = d->string.x; *c != '\0'; c++) {
     if (CHAR(i) == *c) {
       return pc_parse_match(i, r, *c); 
@@ -342,6 +344,8 @@ int pc_parse_oneof (pc_input_t *i, pc_result_t *r, pc_data_t *d) {
 }
 
 int pc_parse_noneof (pc_input_t *i, pc_result_t *r, pc_data_t *d) {
+  if (pc_input_eof(i)) { return pc_err(r, "reached EOF!"); }
+
   for (char *c = d->string.x; *c != '\0'; c++) {
     if (CHAR(i) == *c) { 
       return pc_err(r, "none of \"%s\"", d->string.x); 
@@ -351,12 +355,8 @@ int pc_parse_noneof (pc_input_t *i, pc_result_t *r, pc_data_t *d) {
   return pc_parse_match(i, r, *i->state.ptr);
 }
 
-int pc_parse_any (pc_input_t *i, pc_result_t *r, pc_data_t *d) {
-  (void)d;
-  if (pc_input_eof(i)) { 
-    return pc_err(r, "any char"); 
-  }
-
+int pc_parse_any (pc_input_t *i, pc_result_t *r) {
+  if (pc_input_eof(i)) { return pc_err(r, "reached EOF!"); }
   return pc_parse_match(i, r, *i->state.ptr);
 }
 
@@ -534,20 +534,6 @@ pc_parser_t *pc_any (void) {
   p->type = PC_TYPE_ANY;
 
   return p;
-}
-
-// common complex parser implementations
-
-pc_parser_t *pc_wrap (char lhs, char rhs, pc_parser_t *p, pc_dtor_fn dtor) {
-  return pc_and(
-      pc_fold_str, 
-      3,
-      pc_char(lhs), 
-      p, 
-      pc_char(rhs),
-      free, 
-      dtor, 
-      free);
 }
 
 void pc_delete_err (pc_result_t *r) {
@@ -731,22 +717,74 @@ pc_value_t *pc_fold_second (int n, pc_result_t *r) {
   return r[1].value;
 }
 
+pc_parser_t *pc_wrap (char lhs, pc_parser_t *p, char rhs) {
+  return pc_and(
+      pc_fold_str, 
+      3,
+      pc_char(lhs), 
+      p, 
+      pc_char(rhs),
+      free, free, free);
+}
+
+pc_parser_t *pc_join (pc_parser_t *lhs, char c, pc_parser_t *rhs) {
+  return pc_and(
+      pc_fold_str,
+      3,
+      lhs,
+      pc_char(c),
+      rhs,
+      free, free, free);
+}
+
 pc_parser_t *whtspc () {
   return pc_some(
       pc_fold_str, 
       pc_or(3, pc_char(' '), pc_char('\t'), pc_char('\n')));
 }
 
-pc_parser_t *token (pc_parser_t *p, pc_dtor_fn dtor) {
+pc_parser_t *pc_token (pc_parser_t *p) {
   return pc_and(
-      pc_fold_second, 
+      pc_fold_str, 
       2, 
       whtspc(), 
       p, 
-      free, dtor);
+      free, free);
 }
 
-void *grammar(const char *str) {
+pc_parser_t *pc_integer () {
+  return pc_and(
+      pc_fold_str,
+      2,
+      pc_range('1', '9'),
+      pc_range('0', '9'));
+}
+
+pc_parser_t *pc_alpha () {
+  return pc_or(
+      2, 
+      pc_range('a', 'z'), 
+      pc_range('A', 'Z'));
+}
+
+pc_parser_t *pc_ident () {
+  return pc_and(
+      pc_fold_str,
+      2,
+      pc_or(
+        2,
+        pc_char('_'),
+        pc_alpha()),
+      pc_some(
+        pc_fold_str,
+        pc_or(
+          3,
+          pc_char('_'),
+          pc_range('0', '9'),
+          pc_alpha())));
+}
+
+void *grammar(const char *s) {
   // EBNF grammar syntax:
   //
   // EXPRESSION: PATTERN 
@@ -764,17 +802,39 @@ void *grammar(const char *str) {
   
   
 
+  pc_parser_t *atom = pc_new("atom");
+  pc_parser_t *term = pc_new("term");
   pc_parser_t *expr = pc_new("expr");
-  pc_parser_t *body = pc_new("body");
-  pc_parser_t *ident = pc_new("ident");
-
-  pc_define(expr, pc_any());
-  pc_define(body, pc_any());
-  pc_define(ident, pc_any());
-
-  void *r = pc_parse(str, token(pc_any(), free));
   
-  pc_delete_parsers(3, expr, body, ident);
+  pc_parser_t *pat = pc_wrap(
+      '<', 
+      pc_ident(),
+      '>'); 
+
+  pc_parser_t *str = pc_wrap(
+      '\'',
+      pc_more(
+        pc_fold_str,
+        1,
+        pc_noneof("\'"),
+        free),
+      '\'');
+
+
+  pc_define(expr, 
+      pc_or(2, pc_join(term, '|', expr), term));
+
+  pc_define(term, 
+      pc_or(2, pc_join(atom, '&', term), atom)); 
+ 
+  pc_define(atom, 
+      pc_or(2,
+        pat,
+        pc_wrap('(', expr, ')')));
+
+  void *r = pc_parse(s, expr);
+  
+  pc_delete_parsers(3, expr, atom, term);
   
   return r;
 } 

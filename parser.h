@@ -32,7 +32,7 @@ int pc_parse_range  (pc_input_t *i, pc_result_t *r, pc_data_t *d);
 int pc_parse_string (pc_input_t *i, pc_result_t *r, pc_data_t *d);
 int pc_parse_oneof  (pc_input_t *i, pc_result_t *r, pc_data_t *d);
 int pc_parse_noneof (pc_input_t *i, pc_result_t *r, pc_data_t *d);
-int pc_parse_any    (pc_input_t *i, pc_result_t *r, pc_data_t *d);
+int pc_parse_any    (pc_input_t *i, pc_result_t *r);
 
 pc_parser_t *pc_undefined (void);
 pc_parser_t *pc_new (const char* name);
@@ -52,10 +52,10 @@ pc_parser_t *pc_and    (pc_fold_fn f, int n, ...);
 pc_parser_t *pc_or     (int n, ...);
 pc_parser_t *pc_apply  (pc_apply_fn f, pc_parser_t *x);
 
-pc_parser_t *pc_wrap  (char lhs, char rhs, pc_parser_t *p, pc_dtor_fn dtor);
-pc_parser_t *pc_token (pc_parser_t *p, pc_dtor_fn dtor);
-pc_parser_t *pc_ident ();
-pc_parser_t *pc_float ();
+/*pc_parser_t *pc_wrap  (char lhs, char rhs, pc_parser_t *p, pc_dtor_fn dtor);*/
+/*pc_parser_t *pc_token (pc_parser_t *p, pc_dtor_fn dtor);*/
+/*pc_parser_t *pc_ident ();*/
+/*pc_parser_t *pc_float ();*/
 
 void pc_delete_err (pc_result_t *r);
 

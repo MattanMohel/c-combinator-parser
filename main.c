@@ -8,7 +8,8 @@
 #include "ast.h"
 
 int main(int argc, char** argv) {
-  void *r = test("(Lx.(xx))"); //grammar("      \t\t\n\n x");
+  pemdas();
+  void *r = grammar("(<a>|<a>)&<a>");
   
   /*pc_parser_t *p = pc_or(2, pc_char('a'), pc_char('b'));*/
   /*void *r = pc_parse("b", p);*/
