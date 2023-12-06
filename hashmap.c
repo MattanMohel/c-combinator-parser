@@ -118,7 +118,6 @@ int hmap_find (hashmap *hmap, char *key) {
 }
 
 size_t fnv1a_hash (char *str) {
-  int len = strlen(str);
   size_t hash = FNV_OFFSET;
   for (char *c = str; *c != '\0'; c++) {
     hash ^= *c;

@@ -6,14 +6,10 @@
 #include "hashmap.h"
 #include "vec.h"
 #include "ast.h"
+#include "strop.h"
 
-int main(int argc, char** argv) {
-  pemdas();
-  void *r = grammar("(<a>|<a>)&<a>");
-  
-  /*pc_parser_t *p = pc_or(2, pc_char('a'), pc_char('b'));*/
-  /*void *r = pc_parse("b", p);*/
-
+int main() {
+  pc_result_t *r = grammar("<a> <b> (<c>|<d>)"); 
   if (r) { printf("%s\n", (char*)r); }
 
   return 0;
@@ -30,6 +26,6 @@ typedef struct pattern_t {
   pc_node_t *b;
 } pf_pattern_t;
 
-pc_node_t *apply_pattern (pf_pattern_t *pat, pc_node_t *a) { 
-  return NULL;
-}
+/*pc_node_t *apply_pattern (pf_pattern_t *pat, pc_node_t *a) { */
+/*return NULL;*/
+/*}*/

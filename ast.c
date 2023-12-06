@@ -7,6 +7,7 @@
 
 pc_node_t *pc_node (const char *str) {
   pc_node_t *node = (pc_node_t*)malloc(sizeof(pc_node_t));
+  node->n = 0;
   int len = strlen(str);
   node->str = (char*)malloc(len + 1);
   strcpy(node->str, str);
@@ -39,7 +40,7 @@ char *pc_strcat (char *dest, char *src) {
   int a = strlen(dest);
   int b = strlen(src);
   
-  dest = realloc(dest, a + b + 1);
+  dest = realloc(dest, a + b + 2);
   strcat(dest, src);
   return dest;
 }
