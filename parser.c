@@ -60,12 +60,12 @@ enum {
   PC_TYPE_EXPECT
 };
 
-typedef struct { char *x; }                                               pc_string_t;
-typedef struct { char x; char y; }                                        pc_chars_t;
-typedef struct { pc_parser_t *x; char *e; }                               pc_expect_t;
-typedef struct { int n; pc_parser_t **xs; }                               pc_or_t;
-typedef struct { pc_apply_fn f; pc_parser_t *x; }                         pc_apply_t;
-typedef struct { int n; pc_fold_t f; pc_dtor_t d; pc_parser_t *x; }     pc_count_t;
+typedef struct { char *x; } pc_string_t;
+typedef struct { char x; char y; } pc_chars_t;
+typedef struct { pc_parser_t *x; char *e; } pc_expect_t;
+typedef struct { int n; pc_parser_t **xs; } pc_or_t;
+typedef struct { pc_apply_fn f; pc_parser_t *x; } pc_apply_t;
+typedef struct { int n; pc_fold_t f; pc_dtor_t d; pc_parser_t *x; } pc_count_t;
 typedef struct { int n; pc_fold_t f; pc_dtor_t* ds; pc_parser_t **xs; } pc_and_t;
 
 typedef union pc_data_t {
@@ -864,6 +864,9 @@ void *grammar(const char *s) {
         pc_and(pcf_strfold, 3, pc_char('<'), pc_alpha(), pc_char('>'), free, free),
         pc_and(pcf_strfold, 3, pc_char('('), expr, pc_char(')'), free, free)));
 
-  return pc_parse(s, pc_and(pcf_1st, 2, expr, pc_eoi(), free));
+  void *r = pc_parse(s, pc_and(pcf_1st, 2, expr, pc_eoi(), free));
+  pc_delete_parsers(3, expr, term, atom);
+
+  return r;
 } 
 

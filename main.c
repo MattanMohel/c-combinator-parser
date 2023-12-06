@@ -9,7 +9,7 @@
 #include "strop.h"
 
 int main() {
-  pc_result_t *r = grammar("<a> <b> (<c>|<d>)"); 
+  pc_result_t *r = grammar("<a> <b> ((<c>)|<d>)"); 
   if (r) { printf("%s\n", (char*)r); }
 
   return 0;

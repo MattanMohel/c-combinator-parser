@@ -12,7 +12,6 @@ typedef struct pc_error_t pc_error_t;
 typedef struct pc_state_t pc_state_t;
 typedef union pc_result_t pc_result_t;
 
-
 typedef struct pc_parser_t pc_parser_t;
 typedef struct pc_input_t  pc_input_t;
 typedef union pc_data_t pc_data_t;
